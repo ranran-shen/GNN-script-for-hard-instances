@@ -9,7 +9,7 @@ import numpy as np
 # draw the accuracy line
 # not importtant
 def drawGraph(train_acc_L_list, val_acc_L_list, test_acc_L_list, 
-              save_path):
+              save_path='./acc_curve.png'):
     epochs = np.arange(len(train_acc_L_list[0]))
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
@@ -151,7 +151,6 @@ class SAGEConvScratch(nn.Module):
     def forward(self, x, edge_index, num_nodes):
         agg = mean_aggregate(x, edge_index, num_nodes) # aggregation
         return self.lin_self(x) + self.lin_neigh(agg) 
-    
 
 
 class SAGE(nn.Module):
@@ -198,7 +197,7 @@ class SAGE(nn.Module):
 
 def train_sage(x, edge_index, y, train_ids, val_ids, test_ids, num_layers,
                fanout=5, eval_fanout=None, n_classes=2, hid=32, steps=200, bs=128,
-               lr=1e-2, weight_decay=5e-4, dropout=0.5, device="cpu", eval_every=20, simple_mode=True):
+               lr=1e-2, weight_decay=0, dropout=0.0, device="cpu", eval_every=20, simple_mode=True):
     """Train on ANY graph. fanout=None -> full-neighborhood (degree-preserving)."""
 
     # x : (N, feat_dim), N is number of nodes in the whole graph
