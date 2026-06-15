@@ -146,13 +146,13 @@ if __name__ == "__main__":
 
 
 
-                    tag = ""
+                    tag = "1-hop-"
                     tag += af # gaussian
                     tag += "-"
                     tag += degree_mode # truncate
-                    tag += "-some" if sample_some_neighbor else "-all"
-                    tag += "-simple" if simple_mode else ""
-                    save_path = f"../result/1-hop/{tag}.png"
+                    tag += "-some" if sample_some_neighbor else "-all" # all means using all neighbors in train and evaluation
+                    tag += "-simple" if simple_mode else "" # simple means simple redict: last layer in GNN: (hidden_dim, 2)
+                    save_path = f"../result/{tag}.png"
 
                     
                     drawGraph(train_acc_L_list, val_acc_L_list, test_acc_L_list,
