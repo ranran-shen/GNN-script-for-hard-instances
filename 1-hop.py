@@ -147,11 +147,9 @@ if __name__ == "__main__":
 
 
                     tag = ""
-                    if dropout == 0.0:
-                        tag = "no-drop-"
-                    tag += af
+                    tag += af # gaussian
                     tag += "-"
-                    tag += degree_mode
+                    tag += degree_mode # truncate
                     tag += "-some" if sample_some_neighbor else "-all"
                     tag += "-simple" if simple_mode else ""
                     save_path = f"../result/1-hop/{tag}.png"
