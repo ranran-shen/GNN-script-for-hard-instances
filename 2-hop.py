@@ -41,6 +41,25 @@ def build_2hop_hard_instance(num_papers=5000, num_prolific=100, num_nonprolific=
     y[:num_papers] = y_paper
 
 
+
+
+
+    # prolific_feats = x[PROL0 : PROL0 + num_prolific]       # shape (100, 32)
+    # nonprolific_feats = x[NONP0 : NONP0 + num_nonprolific]  # shape (1900, 32)
+
+    # mu_prolific = prolific_feats.mean(dim=0)      # shape (32,)
+    # mu_nonprolific = nonprolific_feats.mean(dim=0) # shape (32,)
+
+    # print("prolific centroid norm:    ", mu_prolific.norm().item())
+    # print("nonprolific centroid norm: ", mu_nonprolific.norm().item())
+    # print("centroid diff norm:        ", (mu_prolific - mu_nonprolific).norm().item())
+
+    # prolific centroid norm:     0.487601101398468
+    # nonprolific centroid norm:  0.11741432547569275
+    # centroid diff norm:         0.48970070481300354
+
+
+
     # split paper nodes into: train, validation, test
     train, val, test = [], [], []
     for c in (0, 1):
@@ -59,46 +78,65 @@ def build_2hop_hard_instance(num_papers=5000, num_prolific=100, num_nonprolific=
 
 
 if __name__ == "__main__":
+    dropout = 0.0
+    fanout_list_some = [[5],
+                   [5, 7],
+                   [5, 7, 2]]
+
+    # IMPORTANT: fanout=None  -> full neighborhood (keeps author degree).
+    fanout_list_all = [[None],
+                       [None, None],
+                       [None, None, None]]
+    
+
     af_list = ["gaussian", "zero"] # type of author feature
 
-    mode_list = [True, False] # True: simple SAGE with no dropout and last layer (hidden_dim, 2)
+    simple_mode_list = [True, False] # True: simple SAGE with no dropout and last layer (hidden_dim, 2)
                               # False: more complex SAGE, with relu, dropout and 
                               #                          a small network to predict the label of paper
+    sample_some_neighbor_mode = [False] # [True, False]
 
     for af in af_list: # author feature
-        print(f"\n=== author_feat={af!r}")
-        for simple_mode in mode_list:
-            print(f"\n=== simple_mode={simple_mode!r}")
-    
-            # IMPORTANT: fanout=None  -> full neighborhood (keeps author degree).
-            fanout_list = [[5],
-                        [5, 7],
-                        [5, 7, 2]]
-            
-            train_acc_L_list = []
-            val_acc_L_list = []
-            test_acc_L_list= []
+        for simple_mode in simple_mode_list:
+            for sample_some_neighbor in sample_some_neighbor_mode:
+                print(f"\n=== author_feat={af!r}")
+                print(f"=== simple_mode={simple_mode!r}")
+                print(f"=== simple_some_neighbor={sample_some_neighbor!r}")
 
-            for L in (1, 2, 3):
-                x, ei, y, tr, va, te = build_2hop_hard_instance(author_feat=af)
+                if sample_some_neighbor:
+                    fanout_list = fanout_list_some
+                else:
+                    fanout_list = fanout_list_all
+        
 
-                train_acc_list, val_acc_list, test_acc_list = train_sage(x, ei, y, tr, va, te, 
-                                                                        num_layers=L, 
-                                                                        fanout = fanout_list[L-1], 
-                                                                        eval_fanout=None,
-                                                                        device="cuda",
-                                                                        simple_mode=simple_mode)
+                train_acc_L_list = []
+                val_acc_L_list = []
+                test_acc_L_list= []
+
+                for L in (1, 2, 3):
+                    x, ei, y, tr, va, te = build_2hop_hard_instance(author_feat=af)
+
+                    train_acc_list, val_acc_list, test_acc_list = train_sage(x, ei, y, tr, va, te, 
+                                                                            num_layers=L, 
+                                                                            fanout = fanout_list[L-1], 
+                                                                            eval_fanout=None,
+                                                                            device="cuda",
+                                                                            dropout=dropout,
+                                                                            simple_mode=simple_mode)
+                    
+
+                    train_acc_L_list.append(train_acc_list)
+                    val_acc_L_list.append(val_acc_list)
+                    test_acc_L_list.append(test_acc_list)
+                
                 
 
-                train_acc_L_list.append(train_acc_list)
-                val_acc_L_list.append(val_acc_list)
-                test_acc_L_list.append(test_acc_list)
-            
-            
-            if simple_mode:
-                save_path = "./result/2-hop-"+af+"-s"+".png"
-            else:
-                save_path = "./result/2-hop-"+af+".png"
-            
-            drawGraph(train_acc_L_list, val_acc_L_list, test_acc_L_list,
-                    save_path=save_path)
+                tag = ""
+                tag += af
+                tag += "-some" if sample_some_neighbor else "-all"
+                tag += "-simple" if simple_mode else ""
+                save_path = f"../result/2-hop-{tag}.png"
+
+
+                drawGraph(train_acc_L_list, val_acc_L_list, test_acc_L_list,
+                        save_path=save_path)
