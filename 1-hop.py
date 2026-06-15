@@ -2,10 +2,34 @@ import torch
 from SAGE_engine import train_sage   # the graph-agnostic engine
 from SAGE_engine import drawGraph
 
+def diagnose_degrees(deg, y_paper, max_bin=30):
+    for label in [0, 1]:
+        d = deg[y_paper == label]
+        print(f"\n===== label {label}  (n={d.numel()}) =====")
+        print(f"  mean   = {d.float().mean().item():.4f}")
+        print(f"  std    = {d.float().std().item():.4f}")
+        print(f"  min    = {d.min().item()}")
+        print(f"  max    = {d.max().item()}")
+        print(f"  median = {d.median().item()}")
+        print(f"  #(deg==0) = {(d == 0).sum().item()}")   # should be 0 after truncate/shift
+
+        print("  histogram:")
+        counts = torch.bincount(d.clamp(max=max_bin), minlength=max_bin + 1)
+        peak = counts.max().item()
+        for v in range(max_bin + 1):
+            c = counts[v].item()
+            if c == 0:
+                continue
+            bar = "█" * int(50 * c / peak)
+            tag = f"{v}" if v < max_bin else f"{v}+"
+            print(f"    {tag:>4} | {bar} {c}")
+
 
 # avoid isolated paper nodes
 def build_1hop_hard_instance(num_papers=5000, feat_dim=32,
-                             rate0=2.0, rate1=15.0, author_feat="gaussian", seed=0):
+                             rate0=2.0, rate1=15.0, author_feat="gaussian", 
+                             degree_mode="raw",
+                             seed=0):
     g = torch.Generator().manual_seed(seed)
 
     # paper labels: first half -> 0, second half -> 1
@@ -15,7 +39,23 @@ def build_1hop_hard_instance(num_papers=5000, feat_dim=32,
     # number of authors per paper ~ Poisson(rate by label)
     rates = torch.full((num_papers,), rate0)
     rates[y_paper == 1] = rate1
-    deg = torch.poisson(rates, generator=g).long()      # authors per paper
+
+    if degree_mode == "shift":
+        deg = torch.poisson(rates, generator=g).long() + 1
+    elif degree_mode == "truncate":
+        deg = torch.poisson(rates, generator=g).long()
+        # rejection sampling: 把 ==0 的位置反复重采，直到没有 0
+        zero_mask = (deg == 0)
+        while zero_mask.any():
+            deg[zero_mask] = torch.poisson(rates[zero_mask], generator=g).long()
+            zero_mask = (deg == 0)
+    else:  # "raw"
+        deg = torch.poisson(rates, generator=g).long()
+
+        # Label 0: deg==0 count = 315 ratio = 0.126
+        # Label 1: deg==0 count = 0 ratio = 0.0
+    
+    # diagnose_degrees(deg, y_paper)
 
     num_authors = int(deg.sum().item())
     N = num_papers + num_authors
@@ -55,49 +95,67 @@ def build_1hop_hard_instance(num_papers=5000, feat_dim=32,
 
 
 if __name__ == "__main__":
-    # for af in ("gaussian", "zero"):
-    # # # for af in ("gaussian"):
-    # # for af in ("zero"):
-    #     print(f"\n=== author_feat={af!r}")
-    af_list = ["gaussian", "zero"]
-    mode_list = [True, False]
+
+    feature_dim = 32
+    dropout = 0.0
+
+    fanout_list_some = [[5],
+                   [5, 7],
+                   [5, 7, 2]]
+
+    # IMPORTANT: fanout=None  -> full neighborhood (keeps author degree).
+    fanout_list_all = [[None],
+                       [None, None],
+                       [None, None, None]]
+    
+
+    af_list = ["gaussian"] # ["zero"] # ["gaussian", "zero"]
+    simple_mode_list = [True, False] # simple_mode_list = [True, False]
+    degree_mode_list = ["truncate"] # ["truncate", "shift", "raw"]
+    sample_some_neighbor_mode = [False] # [True, False], False means that use all neighbor
 
     for af in af_list:
-        for simple_mode in mode_list:
+        for simple_mode in simple_mode_list:
             print(f"\n=== simple_mode={simple_mode!r}")
+            for degree_mode in degree_mode_list:
+                for sample_some_neighbor in sample_some_neighbor_mode:
+                    if sample_some_neighbor:
+                        fanout_list = fanout_list_some
+                    else:
+                        fanout_list = fanout_list_all
 
-            # IMPORTANT: fanout=None  -> full neighborhood (keeps author degree).
-            fanout_list = [[5],
-                            [5, 7],
-                            [5, 7, 2]]
-            
-            train_acc_L_list = []
-            val_acc_L_list = []
-            test_acc_L_list= []
+                    train_acc_L_list = []
+                    val_acc_L_list = []
+                    test_acc_L_list= []
 
-            for L in (1, 2, 3):
-                # N = num of papers + num of authors
-                # x: (N, feat_dim)
-                # ei: [src, dst], (src[i], dst[i]) is an edge
-                # y: (N), y[:num_papers] = y_paper \in {0, 1}
-                x, ei, y, tr, va, te = build_1hop_hard_instance(author_feat=af)
+                    for L in (1, 2, 3):
+                        x, ei, y, tr, va, te = build_1hop_hard_instance(feat_dim=feature_dim,author_feat=af,degree_mode=degree_mode)
 
-                train_acc_list, val_acc_list, test_acc_list = train_sage(x, ei, y, tr, va, te, 
-                                                                        num_layers=L, 
-                                                                        fanout = fanout_list[L-1], 
-                                                                        eval_fanout=None,
-                                                                        device="cuda",
-                                                                        simple_mode=simple_mode)
-                
+                        train_acc_list, val_acc_list, test_acc_list = train_sage(x, ei, y, tr, va, te, 
+                                                                                num_layers=L, 
+                                                                                fanout = fanout_list[L-1], 
+                                                                                eval_fanout=None,
+                                                                                dropout=dropout,
+                                                                                device="cuda",
+                                                                                simple_mode=simple_mode)
+                        
 
-                train_acc_L_list.append(train_acc_list)
-                val_acc_L_list.append(val_acc_list)
-                test_acc_L_list.append(test_acc_list)
-            
-            if simple_mode:
-                save_path = "/home/srr/gnn-project/synthetic/June/results/1-hop/1-hop-"+af+"-s"+".png"
-            else:
-                save_path = "/home/srr/gnn-project/synthetic/June/results/1-hop/1-hop-"+af+".png"
-            
-            drawGraph(train_acc_L_list, val_acc_L_list, test_acc_L_list,
-                    save_path=save_path)
+                        train_acc_L_list.append(train_acc_list)
+                        val_acc_L_list.append(val_acc_list)
+                        test_acc_L_list.append(test_acc_list)
+
+
+
+                    tag = ""
+                    if dropout == 0.0:
+                        tag = "no-drop-"
+                    tag += af
+                    tag += "-"
+                    tag += degree_mode
+                    tag += "-some" if sample_some_neighbor else "-all"
+                    tag += "-simple" if simple_mode else ""
+                    save_path = f"../results/1-hop/{tag}.png"
+
+                    
+                    drawGraph(train_acc_L_list, val_acc_L_list, test_acc_L_list,
+                            save_path=save_path)
