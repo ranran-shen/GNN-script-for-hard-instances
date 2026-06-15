@@ -154,7 +154,7 @@ if __name__ == "__main__":
                     tag += degree_mode
                     tag += "-some" if sample_some_neighbor else "-all"
                     tag += "-simple" if simple_mode else ""
-                    save_path = f"../results/1-hop/{tag}.png"
+                    save_path = f"../result/1-hop/{tag}.png"
 
                     
                     drawGraph(train_acc_L_list, val_acc_L_list, test_acc_L_list,
