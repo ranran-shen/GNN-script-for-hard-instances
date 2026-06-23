@@ -274,7 +274,7 @@ if __name__ == "__main__":
                     tag = tag + '-af=' + af
                     tag += "-some" if sample_some_neighbor else "-all"
                     tag += "-simple" if simple_mode else ""
-                    save_path = f"/home/srr/gnn-project/synthetic/June/results/4-cycle/split-group/layer4/drop-{tag}.png"
+                    save_path = f"./results/4-cycle/split-group/layer4/drop-{tag}.png"
 
                     drawGraph(train_acc_L_list, val_acc_L_list, test_acc_L_list,layer_list=layer_list,
                             save_path=save_path)
